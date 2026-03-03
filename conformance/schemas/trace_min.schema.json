@@ -1,0 +1,40 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Execution Boundary Minimal Trace",
+  "description": "Canonical format for conformance testing. Integration tests convert Jaeger/OTLP output to this format before assertion.",
+  "type": "object",
+  "required": ["trace_id", "spans"],
+  "additionalProperties": false,
+  "properties": {
+    "trace_id": {
+      "type": "string",
+      "minLength": 16,
+      "description": "Hex trace ID, at least 16 chars"
+    },
+    "spans": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["span_id", "name", "attributes", "sampled"],
+        "additionalProperties": true,
+        "properties": {
+          "span_id": { "type": "string", "minLength": 8 },
+          "name": { "type": "string", "minLength": 1 },
+          "sampled": {
+            "type": "boolean",
+            "description": "Whether this span was retained by the tail sampler"
+          },
+          "attributes": {
+            "type": "object",
+            "description": "Span attributes. eb.* attributes must conform to semantic/attributes.md"
+          },
+          "duration_ms": {
+            "type": "number",
+            "description": "Span duration in milliseconds. Optional."
+          }
+        }
+      }
+    }
+  }
+}
