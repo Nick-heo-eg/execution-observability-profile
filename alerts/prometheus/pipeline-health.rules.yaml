@@ -1,0 +1,55 @@
+# alerts/prometheus/pipeline-health.rules.yaml
+# OTel Collector pipeline health alerts.
+# Scrapes otelcol self-metrics on :8888.
+
+groups:
+  - name: otel-pipeline-health
+    rules:
+      - alert: ExporterQueueHigh
+        expr: |
+          otelcol_exporter_queue_size / otelcol_exporter_queue_capacity > 0.80
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "OTel exporter queue above 80%"
+          description: "{{ $labels.exporter }} queue at {{ $value | humanizePercentage }}. Risk of data loss on spike."
+
+      - alert: ExporterDropNonZero
+        expr: |
+          rate(otelcol_exporter_send_failed_spans_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "OTel exporter dropping spans"
+          description: "{{ $labels.exporter }} is dropping spans. Check backend connectivity and queue capacity."
+
+      - alert: CollectorMemoryHigh
+        expr: |
+          otelcol_process_memory_rss / otelcol_process_memory_limit > 0.85
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "OTel Collector memory above 85%"
+          description: "Collector {{ $labels.instance }} at {{ $value | humanizePercentage }} memory. OOM risk."
+
+      - alert: TailSamplingLatencyHigh
+        expr: |
+          histogram_quantile(0.99, rate(otelcol_processor_tail_sampling_sampling_decision_latency_bucket[5m])) > 8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Tail sampling decision p99 > 8s"
+          description: "Tail sampling latency degraded. Check num_traces sizing (tps × decision_wait × 1.2)."
+
+      - alert: CollectorDown
+        expr: up{job="otelcol"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "OTel Collector instance down"
+          description: "Collector {{ $labels.instance }} is not reachable."
