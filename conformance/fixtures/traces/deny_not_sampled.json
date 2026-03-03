@@ -1,0 +1,18 @@
+{
+  "_comment": "INVALID FIXTURE: DENY span with sampled=false. Violates keep-deny invariant. Used to verify test_deny_retention catches this.",
+  "trace_id": "deadbeefdeadbeefdeadbeefdeadbeef",
+  "spans": [
+    {
+      "span_id": "cafebabecafebabe",
+      "name": "eb.evaluate",
+      "sampled": false,
+      "duration_ms": 0.3,
+      "attributes": {
+        "eb.decision": "DENY",
+        "eb.reason_code": "AMOUNT_EXCEEDS_LIMIT",
+        "eb.ledger_commit": true,
+        "eb.proof_hash": "bad00000"
+      }
+    }
+  ]
+}
