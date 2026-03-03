@@ -1,0 +1,19 @@
+{
+  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+  "spans": [
+    {
+      "span_id": "00f067aa0ba902b7",
+      "name": "eb.evaluate",
+      "sampled": true,
+      "duration_ms": 0.8,
+      "attributes": {
+        "eb.decision": "DENY",
+        "eb.reason_code": "DENY_RULE",
+        "eb.ledger_commit": true,
+        "eb.proof_hash": "abc12345",
+        "eb.envelope_id": "550e8400-e29b-41d4-a716-446655440000",
+        "eb.action_type": "delete_database"
+      }
+    }
+  ]
+}
