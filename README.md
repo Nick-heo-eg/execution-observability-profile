@@ -177,6 +177,29 @@ Full specification: [semantic/attributes.md](semantic/attributes.md)
 
 ---
 
+## Conformance Verification
+
+Pattern invariants were verified against [execution-gate](https://github.com/Nick-heo-eg/execution-gate) v0.3.0.
+
+**Setup:** execution-gate[otel] → otelcol-agent → otelcol-gateway (tail_sampling) → Jaeger
+
+**Result (5 decisions: 2 ALLOW, 3 DENY):**
+
+| Invariant | Expected | Observed |
+|---|---|---|
+| DENY retention | 3/3 kept | `keep-deny sampled=true: 3` ✓ |
+| ALLOW sampling | baseline 10% | 0 retained (correct at low volume) ✓ |
+| `eb.reason_code` on each DENY span | present | `NO_RULE`, `AMOUNT_EXCEEDS_LIMIT`, `DENY_RULE` ✓ |
+| `eb.ledger_commit=true` on each span | present | `True` on all 3 DENY spans ✓ |
+| No trace fragments | single span per traceID | 1 span / trace, no splits ✓ |
+
+ALLOW traces absent from the backend is the expected outcome — not a gap.
+A DENY that never reaches the backend would be the failure mode. None occurred.
+
+→ Demo script: [examples/quiet_adoption_demo.py](examples/quiet_adoption_demo.py) in execution-gate
+
+---
+
 ## License
 
 Apache 2.0
