@@ -1,0 +1,19 @@
+{
+  "trace_id": "9e0a2f3c44b6d1e5f7a8c2b4d6e8f0a2",
+  "spans": [
+    {
+      "span_id": "b3c4d5e6f7a8b9c0",
+      "name": "eb.evaluate",
+      "sampled": true,
+      "duration_ms": 0.5,
+      "attributes": {
+        "eb.decision": "ALLOW",
+        "eb.reason_code": "POLICY_ALLOW",
+        "eb.ledger_commit": true,
+        "eb.proof_hash": "def45678",
+        "eb.envelope_id": "660f9511-f3ac-52e5-b827-557766551111",
+        "eb.action_type": "send_email"
+      }
+    }
+  ]
+}
