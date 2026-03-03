@@ -1,0 +1,48 @@
+# Agent Collector — DaemonSet
+# Runs on every node. Receives OTLP from local services/gate.
+# Routes to Gateway via traceID hash (mandatory for tail sampling correctness).
+#
+# Sizing: ~400MiB per node. Adjust limit_mib for your workload.
+# num_traces sizing: tps × decision_wait × 1.2 (done at Gateway, not here)
+
+receivers:
+  otlp:
+    protocols:
+      grpc: { endpoint: 0.0.0.0:4317 }
+      http: { endpoint: 0.0.0.0:4318 }
+
+processors:
+  memory_limiter:
+    check_interval: 2s
+    limit_mib: 400
+    spike_limit_mib: 100
+  batch:
+    send_batch_size: 1024
+    timeout: 5s
+  resourcedetection:
+    detectors: [env, k8snode]
+
+exporters:
+  loadbalancing:
+    routing_key: traceID   # ← mandatory: keeps all spans of a trace on one Gateway replica
+    resolver:
+      k8s:
+        service: otel-gateway-headless
+        ports: [4317]
+    protocol:
+      otlp:
+        sending_queue:
+          enabled: true
+          queue_size: 2000
+          num_consumers: 8
+        timeout: 1s
+
+service:
+  telemetry:
+    metrics:
+      address: 0.0.0.0:8888   # scrape for pipeline health
+  pipelines:
+    traces:
+      receivers:  [otlp]
+      processors: [memory_limiter, resourcedetection, batch]
+      exporters:  [loadbalancing]
