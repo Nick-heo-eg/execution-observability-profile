@@ -1,0 +1,12 @@
+apiVersion: 1
+
+providers:
+  - name: execution-boundary
+    orgId: 1
+    folder: "Execution Boundary"
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 10
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards
