@@ -1,0 +1,33 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Execution Boundary Minimal Metrics",
+  "description": "Canonical format for metrics conformance testing. Validates label cardinality rules.",
+  "type": "object",
+  "required": ["series"],
+  "additionalProperties": false,
+  "properties": {
+    "series": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "labels"],
+        "additionalProperties": true,
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Metric name, e.g. eb_decisions_total"
+          },
+          "labels": {
+            "type": "object",
+            "description": "Label key-value pairs. eb.envelope_id and eb.proof_hash are FORBIDDEN here."
+          },
+          "value": {
+            "type": "number",
+            "description": "Metric value. Optional."
+          }
+        }
+      }
+    }
+  }
+}
