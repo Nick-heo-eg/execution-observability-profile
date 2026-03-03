@@ -22,8 +22,8 @@ processors:
   # baseline: 10% of remaining ALLOW spans.
   tail_sampling:
     decision_wait: 10s
-    num_traces: 50000
-    expected_new_traces_per_sec: 200
+    num_traces: 50000        # reference value — recalculate per sizing formula in docs/pattern-spec.md §6
+    expected_new_traces_per_sec: 200  # reference value — set to observed peak TPS × 1.5
     policies:
       - name: keep-deny
         type: string_attribute
