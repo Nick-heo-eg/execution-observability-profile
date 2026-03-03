@@ -1,5 +1,8 @@
 # Execution Boundary Observability Pattern (v1)
 
+[![conformance-static](https://github.com/Nick-heo-eg/execution-observability-profile/actions/workflows/conformance-static.yml/badge.svg)](https://github.com/Nick-heo-eg/execution-observability-profile/actions/workflows/conformance-static.yml) [![conformance-integration](https://github.com/Nick-heo-eg/execution-observability-profile/actions/workflows/conformance-integration.yml/badge.svg)](https://github.com/Nick-heo-eg/execution-observability-profile/actions/workflows/conformance-integration.yml)
+
+
 Observability pattern for [Execution Boundary](https://github.com/Nick-heo-eg/execution-boundary) systems.
 
 **The gate controls execution. This profile observes the gate.**
@@ -127,7 +130,7 @@ This profile follows the Execution Boundary layer versioning conventions:
 - **Collector config changes**: patch version, no compatibility gate
 - **Dashboard/alert changes**: patch version, no compatibility gate
 
-Current version: **v1.0**
+Current version: **v1.1**
 
 Compatibility with Core Spec: [execution-boundary-core-spec](https://github.com/Nick-heo-eg/execution-boundary-core-spec) (commit: `d3e239b`)
 
@@ -199,6 +202,14 @@ A DENY that never reaches the backend would be the failure mode. None occurred.
 → Demo script: [examples/quiet_adoption_demo.py](examples/quiet_adoption_demo.py) in execution-gate
 
 ---
+
+---
+
+## Conformance
+
+This profile is enforced by CI.
+Pull requests that violate invariants will fail.
+See [conformance/](conformance/) for machine-verifiable rules.
 
 ## License
 
