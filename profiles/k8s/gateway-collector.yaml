@@ -1,0 +1,80 @@
+# Gateway Collector — Deployment (HA, 2+ replicas)
+# Receives from Agent collectors (traceID-routed).
+# Tail sampling runs HERE only — never at Agent.
+#
+# num_traces sizing: tps × decision_wait × 1.2
+# Example: 1000 tps × 10s × 1.2 = 12000
+#
+# Scale Gateway replicas before scaling num_traces.
+# Each replica holds its own trace buffer — traceID LB ensures completeness.
+
+receivers:
+  otlp:
+    protocols:
+      grpc: { endpoint: 0.0.0.0:4317 }
+
+processors:
+  memory_limiter:
+    check_interval: 2s
+    limit_mib: 2400
+    spike_limit_mib: 600
+
+  tail_sampling:
+    decision_wait: 10s
+    num_traces: 12000          # tps × decision_wait × 1.2
+    expected_new_traces_per_sec: 1000
+    policies:
+      - name: keep-deny
+        type: string_attribute
+        string_attribute:
+          key: eb.decision
+          values: [DENY]       # all DENY traces kept — negative proof requirement
+
+      - name: keep-hold
+        type: string_attribute
+        string_attribute:
+          key: eb.decision
+          values: [HOLD]
+
+      - name: keep-errors
+        type: status_code
+        status_code:
+          status_codes: [ERROR]
+
+      - name: keep-slow
+        type: latency
+        latency:
+          threshold_ms: 500
+
+      - name: baseline
+        type: probabilistic
+        probabilistic:
+          sampling_percentage: 10  # ALLOW baseline
+
+  batch:
+    send_batch_size: 2048
+    timeout: 2s
+
+exporters:
+  otlp/traces:
+    endpoint: traces-backend:4317
+    sending_queue:
+      enabled: true
+      queue_size: 5000
+      num_consumers: 16
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 30s
+  prometheusremotewrite/metrics:
+    endpoint: http://metrics-backend:9090/api/v1/write
+
+service:
+  telemetry:
+    metrics:
+      address: 0.0.0.0:8888
+  pipelines:
+    traces:
+      receivers:  [otlp]
+      processors: [memory_limiter, tail_sampling, batch]
+      exporters:  [otlp/traces]
