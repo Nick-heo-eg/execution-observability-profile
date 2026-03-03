@@ -1,0 +1,38 @@
+name: conformance-static
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  static:
+    name: Static Conformance (invariants, no Docker)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install conformance dependencies
+        run: pip install -r conformance/requirements.txt
+
+      - name: Run conformance tests
+        run: pytest conformance/tests/ -v --tb=short
+
+      - name: Verify fixture count
+        run: |
+          # Sanity check: all expected fixtures exist
+          for f in \
+            conformance/fixtures/traces/deny_trace.json \
+            conformance/fixtures/traces/allow_trace.json \
+            conformance/fixtures/traces/fragmented_trace.json \
+            conformance/fixtures/traces/deny_not_sampled.json \
+            conformance/fixtures/metrics/ok_metrics.json \
+            conformance/fixtures/metrics/bad_metrics_envelope_id_label.json; do
+            [ -f "$f" ] || { echo "MISSING FIXTURE: $f"; exit 1; }
+          done
+          echo "All fixtures present."

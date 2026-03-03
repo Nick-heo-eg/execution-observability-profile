@@ -1,0 +1,118 @@
+name: conformance-integration
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  integration:
+    name: Integration Conformance (OTel stack + Jaeger)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install conformance dependencies
+        run: pip install -r conformance/requirements.txt
+
+      - name: Install execution-gate with OTel
+        run: pip install "execution-gate[otel]"
+
+      - name: Start OTel debug stack
+        run: |
+          cd examples/otelcol-debug
+          docker compose up -d
+          # Wait for all services to be healthy
+          sleep 10
+
+      - name: Wait for Jaeger to be ready
+        run: |
+          for i in $(seq 1 12); do
+            if curl -sf http://localhost:16686/api/services > /dev/null 2>&1; then
+              echo "Jaeger ready."
+              break
+            fi
+            echo "Waiting for Jaeger... ($i/12)"
+            sleep 5
+          done
+
+      - name: Generate gate traffic (DENY + ALLOW)
+        run: |
+          # Use the demo script which generates 3 DENY + 2 ALLOW through execution-gate[otel]
+          python examples/quiet_adoption_demo.py
+          # Allow time for span export through agent → gateway → Jaeger pipeline
+          sleep 15
+
+      - name: Fetch DENY traces from Jaeger
+        run: |
+          mkdir -p conformance/tmp
+          python conformance/tools/jaeger_fetch.py \
+            --jaeger http://localhost:16686 \
+            --service execution-gate \
+            --operation eb.evaluate \
+            --out conformance/tmp/deny_traces.json \
+            --decision DENY \
+            --min-traces 1 \
+            --retries 8 \
+            --retry-delay 5
+
+      - name: Assert DENY trace invariants (live data)
+        run: |
+          python - << 'EOF'
+          import json, sys
+          from pathlib import Path
+
+          traces = json.loads(Path("conformance/tmp/deny_traces.json").read_text())
+          print(f"Validating {len(traces)} DENY trace(s) from Jaeger...")
+
+          REQUIRED = ["eb.decision", "eb.reason_code", "eb.ledger_commit"]
+          errors = []
+
+          for trace in traces:
+              eb_spans = [s for s in trace["spans"] if s["name"] == "eb.evaluate"]
+
+              # Invariant 4: exactly one eb.evaluate per trace
+              if len(eb_spans) != 1:
+                  errors.append(f"trace {trace['trace_id']}: expected 1 eb.evaluate, got {len(eb_spans)}")
+                  continue
+
+              span = eb_spans[0]
+              attrs = span["attributes"]
+
+              # Invariant 2: DENY must be sampled
+              if attrs.get("eb.decision") == "DENY" and not span["sampled"]:
+                  errors.append(f"trace {trace['trace_id']}: DENY span has sampled=false")
+
+              # Invariant 1: required attributes
+              missing = [k for k in REQUIRED if k not in attrs]
+              if missing:
+                  errors.append(f"trace {trace['trace_id']}: missing attributes {missing}")
+
+              # Invariant 3: eb.envelope_id must NOT be a metric label
+              # (checked separately in static tests — here we verify it IS a span attribute)
+              if "eb.envelope_id" not in attrs:
+                  errors.append(f"trace {trace['trace_id']}: missing eb.envelope_id span attribute")
+
+          if errors:
+              print("CONFORMANCE FAILURES:")
+              for e in errors:
+                  print(f"  - {e}")
+              sys.exit(1)
+
+          print(f"All {len(traces)} DENY trace(s) pass invariant checks.")
+          EOF
+
+      - name: Run full static conformance suite
+        run: pytest conformance/tests/ -v --tb=short
+
+      - name: Stop OTel stack
+        if: always()
+        run: |
+          cd examples/otelcol-debug
+          docker compose down -v
