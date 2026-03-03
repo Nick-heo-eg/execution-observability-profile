@@ -1,40 +1,135 @@
-# Execution Boundary Observability Profile
+# Execution Boundary Observability Pattern (v1)
 
-Observability profile for [Execution Boundary](https://github.com/Nick-heo-eg/execution-boundary) systems.
-
-This profile defines how to observe an execution boundary — not how to enforce one.
+Observability pattern for [Execution Boundary](https://github.com/Nick-heo-eg/execution-boundary) systems.
 
 **The gate controls execution. This profile observes the gate.**
 
----
+This is not a monitoring template. It is a structured pattern for making execution boundary decisions observable, traceable, and auditable — aligned with the Execution Boundary Core Spec.
 
-## Layered Model
-
-```
-Layer 1  execution-boundary-core-spec          ← contract
-Layer 2  execution-gate                        ← enforcement
-Layer 3  agent-execution-guard                 ← agent SDK
-Layer 4  execution-observability-profile       ← this repo
-```
+→ **[docs/pattern-spec.md](docs/pattern-spec.md)** — canonical pattern definition
 
 ---
 
-## What This Profile Defines
+## 1. What This Is
 
-- OTel Collector topology (Agent → Gateway, 2-tier)
-- Semantic conventions for execution boundary spans and metrics
-- Tail sampling policy: keep all DENY, sample ALLOW at 10%
-- Reference Grafana dashboards
-- Prometheus alert rules
+An execution boundary gate produces three types of decisions: ALLOW, DENY, HOLD.
 
-## What This Profile Does Not Define
+Each decision must be:
+- **Recorded** before execution occurs (pre-execution)
+- **Traceable** — linked to the envelope that was evaluated
+- **Verifiable** — DENY decisions are never sampled away
 
-- Execution gate logic
-- Policy evaluation
-- Ledger implementation
-- Any enforcement behavior
+This profile defines the OTel-based observability layer that makes these properties inspectable without modifying gate behavior.
 
-Gate code has no dependency on this profile. Observability is additive.
+```
+Envelope → evaluate() → Decision → Ledger → [ execute only if ALLOW ]
+                                      ↓
+                               OTel Span (eb.*)
+                                      ↓
+                          Agent → Gateway → Backend
+```
+
+---
+
+## 2. What This Is Not
+
+- Not an execution gate (no enforcement logic)
+- Not a policy engine (no authorization decisions)
+- Not a logging framework (structured tracing, not free-text logs)
+- Not a replacement for the Merkle ledger (complementary, not equivalent)
+
+Gate code has zero dependency on this profile. Observability is additive and non-invasive.
+
+---
+
+## 3. Architecture Pattern
+
+```
+Service / Gate
+    │ OTLP gRPC
+    ▼
+┌─────────────────────────────┐
+│  Agent Collector (DaemonSet)│
+│  - memory_limiter           │
+│  - batch                    │
+│  - loadbalancing exporter   │  ← traceID hash → deterministic routing
+└─────────────┬───────────────┘
+              │ OTLP gRPC (traceID-keyed)
+              ▼
+┌─────────────────────────────┐
+│  Gateway Collector (HA ×N)  │
+│  - memory_limiter           │
+│  - tail_sampling            │  ← DENY always kept (hard requirement)
+│  - batch                    │
+│  - fanout exporters         │
+└─────────────────────────────┘
+```
+
+**TraceID-based load balancing is mandatory.** Without it, a trace spanning multiple spans may be split across Gateway replicas, causing tail sampling to operate on incomplete traces and silently drop DENY spans.
+
+Full configs: [profiles/k8s/](profiles/k8s/)
+
+---
+
+## 4. Failure Modes This Pattern Prevents
+
+| Failure Mode | How This Pattern Prevents It |
+|---|---|
+| DENY span dropped by sampler | `keep-deny` policy: 100% retention, no probabilistic sampling on DENY |
+| DENY not distinguishable from never-proposed | `eb.decision=DENY` on every denied span; `eb.ledger_commit=true` required |
+| Trace split across Gateway replicas | TraceID loadbalancing exporter in Agent tier |
+| Cardinality explosion on metrics | `eb.envelope_id` banned from metric labels; only low-cardinality attributes permitted |
+| Evaluator latency spike undetected | `eb.evaluate` span duration tracked; alert at p99 > 100ms |
+| Ledger commit silently failing | `eb_ledger_commits_total / eb_decisions_total` ratio must be 1.0 |
+
+---
+
+## 5. Minimal Deploy Guide
+
+**Local (no k8s):**
+```bash
+cd examples/otelcol-debug
+docker compose up
+# Grafana → http://localhost:3000  (admin/admin)
+# Prometheus → http://localhost:9090
+```
+
+**Kubernetes:**
+```bash
+kubectl apply -f profiles/k8s/agent-collector.yaml
+kubectl apply -f profiles/k8s/gateway-collector.yaml
+```
+
+Import dashboards from [dashboards/grafana/](dashboards/grafana/) into Grafana.
+Apply alerts from [alerts/prometheus/](alerts/prometheus/) to Prometheus.
+
+---
+
+## 6. Production Hardening Checklist
+
+- [ ] TraceID loadbalancing exporter configured in Agent (not round-robin)
+- [ ] `keep-deny` tail sampling policy verified — check sampled/evaluated ratio in `otel-pipeline-health` dashboard
+- [ ] `eb_ledger_commits_total / eb_decisions_total` alert active — triggers if ratio drops below 1.0
+- [ ] `eb.envelope_id` confirmed absent from all metric label sets
+- [ ] Gateway replicas ≥ 2 (HA); liveness probe on OTLP port
+- [ ] Exporter queue capacity set per sizing formula (see [docs/pattern-spec.md](docs/pattern-spec.md))
+- [ ] `ExporterDropNonZero` alert routed to critical channel
+- [ ] Tail sampling `decision_wait` ≥ max expected trace duration
+
+---
+
+## 7. Versioning Policy
+
+This profile follows the Execution Boundary layer versioning conventions:
+
+- **Semantic convention changes** (new/renamed `eb.*` attributes): minor version bump, backward-compatible additions only
+- **Breaking attribute removals**: major version bump, RFC required
+- **Collector config changes**: patch version, no compatibility gate
+- **Dashboard/alert changes**: patch version, no compatibility gate
+
+Current version: **v1.0**
+
+Compatibility with Core Spec: [execution-boundary-core-spec](https://github.com/Nick-heo-eg/execution-boundary-core-spec) (commit: `d3e239b`)
 
 ---
 
@@ -42,69 +137,23 @@ Gate code has no dependency on this profile. Observability is additive.
 
 Spans emitted by an execution boundary gate MUST include:
 
-| Attribute | Type | Values | Notes |
+| Attribute | Type | Cardinality | Metric Label? |
 |---|---|---|---|
-| `eb.envelope_id` | string | UUID | Per-decision identifier |
-| `eb.decision` | string | `ALLOW` / `DENY` / `HOLD` | Low cardinality — safe as metric label |
-| `eb.policy_id` | string | policy name | Which policy evaluated |
-| `eb.reason_code` | string | `POLICY_ALLOW`, `AMOUNT_EXCEEDS_LIMIT`, etc. | Low cardinality |
-| `eb.ledger_commit` | bool | `true` / `false` | Was decision appended to ledger |
-| `eb.authority_score` | float | 0.0–1.0 | If applicable |
+| `eb.envelope_id` | string | High | **Never** |
+| `eb.decision` | string (ALLOW/DENY/HOLD) | Low | Yes |
+| `eb.reason_code` | string | Low | Yes |
+| `eb.ledger_commit` | bool | Low | Yes |
 
-**`eb.envelope_id` is a span attribute only — never a metric label.**
-
-Full convention: [semantic/attributes.md](semantic/attributes.md)
-
----
-
-## Collector Topology
-
-```
-Service / Gate
-    │ OTLP (gRPC)
-    ▼
-Agent Collector (DaemonSet)
-  - memory_limiter
-  - resourcedetection
-  - batch
-  - loadbalancing exporter (traceID hash → Gateway)
-    │
-    ▼
-Gateway Collector (Deployment, HA)
-  - memory_limiter
-  - tail_sampling  ← DENY always kept
-  - batch
-  - fanout → traces backend + metrics backend
-```
-
-TraceID-based load balancing is mandatory.
-Without it, tail sampling across multiple Gateway replicas will produce partial traces.
-
-Full configs: [profiles/k8s/](profiles/k8s/)
-
----
-
-## Tail Sampling Policy
-
-| Policy | Rule | Rationale |
-|---|---|---|
-| `keep-deny` | `eb.decision = DENY` | All denials are kept — negative proof requirement |
-| `keep-errors` | `status_code = ERROR` | All errors kept |
-| `keep-slow` | `latency ≥ 500ms` | Performance outliers |
-| `baseline` | 10% probabilistic | ALLOW baseline coverage |
-
-DENY traces are never sampled away. This is a hard requirement of the Execution Boundary model.
+Full specification: [semantic/attributes.md](semantic/attributes.md)
 
 ---
 
 ## Dashboards
 
-Two reference dashboards (Grafana JSON):
-
-| Dashboard | Purpose |
-|---|---|
-| `execution-boundary-overview` | Deny rate, decision latency, ledger commit latency, reason_code breakdown |
-| `otel-pipeline-health` | Queue depth, drop rate, tail sampling latency, exporter errors |
+| Dashboard | UID | Purpose |
+|---|---|---|
+| Execution Boundary — Overview | `eb-overview-v1` | Deny rate, decision latency, ledger commit coverage, reason_code breakdown |
+| OTel Pipeline Health | `eb-otel-pipeline-v1` | Queue depth, drop rate, tail sampling latency, exporter errors, collector uptime |
 
 → [dashboards/grafana/](dashboards/grafana/)
 
@@ -112,28 +161,19 @@ Two reference dashboards (Grafana JSON):
 
 ## Alerts
 
-Minimum alert set (Prometheus):
-
 | Alert | Condition | Severity |
 |---|---|---|
-| `ExporterQueueHigh` | queue > 80% capacity | warning |
-| `ExporterDropNonZero` | drop_rate > 0 | critical |
-| `GatewayOOMRisk` | memory > 85% limit | warning |
-| `TailSamplingLatencyHigh` | p99 decision latency > 8s | warning |
-| `CollectorDown` | up == 0 | critical |
+| `EbCollectorQueueHigh` | queue > 80% capacity for 5m | warning |
+| `EbCollectorDropNonZero` | drop rate > 0 for 1m | critical |
+| `EbCollectorMemoryHigh` | RSS > 85% of limit for 10m | warning |
+| `EbTailSamplingLatencyHigh` | p99 decision window > 30s for 5m | warning |
+| `EbCollectorDown` | up == 0 for 2m | critical |
+| `EbDenyRateHigh` | deny ratio > 30% for 10m | warning |
+| `EbLedgerCommitFailing` | commit/decision ratio < 1.0 for 5m | critical |
+| `EbDecisionLatencyHigh` | p99 evaluate() > 100ms for 5m | warning |
+| `EbNoDenyInWindow` | no DENY in 24h | info |
 
 → [alerts/prometheus/](alerts/prometheus/)
-
----
-
-## Quickstart (local debug)
-
-```bash
-cd examples/otelcol-debug
-docker compose up
-```
-
-Sends example ALLOW/DENY spans through the full 2-tier pipeline locally.
 
 ---
 
