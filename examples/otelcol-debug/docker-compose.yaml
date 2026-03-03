@@ -1,6 +1,7 @@
 version: "3.8"
 
 # Local debug topology for execution-observability-profile.
+# FOR LOCAL DEVELOPMENT ONLY. Not for production use.
 #
 # Mirrors the 2-tier Agent → Gateway production topology in a single-host setup.
 # No Kubernetes required. No auth. No TLS.
@@ -8,7 +9,7 @@ version: "3.8"
 # Usage:
 #   docker-compose up -d
 #   python3 ../../send_sample_spans.py   # optional: inject test spans
-#   open http://localhost:3000           # Grafana (admin/admin)
+#   open http://localhost:3000           # Grafana
 #   open http://localhost:9090           # Prometheus
 #   open http://localhost:4318           # OTLP HTTP receiver (debug)
 #
@@ -98,7 +99,7 @@ services:
     environment:
       - GF_AUTH_ANONYMOUS_ENABLED=true
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-changeme}
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
       - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
