@@ -211,6 +211,8 @@ This profile is enforced by CI.
 Pull requests that violate invariants will fail.
 See [conformance/](conformance/) for machine-verifiable rules.
 
+Conformance harness and integration workflow exist. Validated end-to-end on a real approval flow ([invest-core](https://github.com/Nick-heo-eg/invest-core-private)).
+
 ## License
 
 Apache 2.0
