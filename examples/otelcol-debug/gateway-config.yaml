@@ -1,0 +1,86 @@
+# OTel Collector — Gateway (debug/local)
+# Equivalent to profiles/k8s/gateway-collector.yaml but simplified for local use.
+# Applies tail sampling, exports to Jaeger + Prometheus.
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+    spike_limit_mib: 128
+
+  # Tail sampling — mirrors production policy.
+  # keep-deny: 100% of DENY decisions (negative proof requirement).
+  # keep-hold: 100% of HOLD decisions.
+  # keep-errors: 100% of error spans.
+  # keep-slow: spans >1s.
+  # baseline: 10% of remaining ALLOW spans.
+  tail_sampling:
+    decision_wait: 10s
+    num_traces: 50000
+    expected_new_traces_per_sec: 200
+    policies:
+      - name: keep-deny
+        type: string_attribute
+        string_attribute:
+          key: eb.decision
+          values: ["DENY"]
+
+      - name: keep-hold
+        type: string_attribute
+        string_attribute:
+          key: eb.decision
+          values: ["HOLD"]
+
+      - name: keep-errors
+        type: status_code
+        status_code:
+          status_codes: [ERROR]
+
+      - name: keep-slow
+        type: latency
+        latency:
+          threshold_ms: 1000
+
+      - name: baseline-allow
+        type: probabilistic
+        probabilistic:
+          sampling_percentage: 10
+
+  batch:
+    send_batch_size: 1024
+    timeout: 5s
+
+exporters:
+  # Jaeger backend
+  otlp/jaeger:
+    endpoint: jaeger:14250
+    tls:
+      insecure: true
+
+  # Prometheus metrics exporter (scraped by Prometheus container)
+  prometheus:
+    endpoint: 0.0.0.0:8889
+    namespace: eb
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, tail_sampling, batch]
+      exporters: [otlp/jaeger]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [prometheus]
+
+  telemetry:
+    metrics:
+      address: 0.0.0.0:8888
+    logs:
+      level: warn
