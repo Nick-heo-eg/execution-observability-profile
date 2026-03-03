@@ -1,0 +1,54 @@
+# OTel Collector — Agent (debug/local)
+# Equivalent to profiles/k8s/agent-collector.yaml but simplified for local use.
+# Receives OTLP from application, forwards to gateway.
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch:
+    send_batch_size: 1024
+    timeout: 5s
+
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 256
+    spike_limit_mib: 64
+
+exporters:
+  # Forward all spans to gateway via OTLP/gRPC.
+  # In k8s, this uses the loadbalancing exporter keyed on traceID.
+  # Locally, direct connection is sufficient.
+  otlp:
+    endpoint: otelcol-gateway:4317
+    tls:
+      insecure: true
+
+  # Debug exporter — logs first 3 fields of each span to stdout.
+  # Remove in production.
+  debug:
+    verbosity: normal
+    sampling_initial: 5
+    sampling_thereafter: 100
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp, debug]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp]
+
+  telemetry:
+    metrics:
+      address: 0.0.0.0:8888
+    logs:
+      level: warn
