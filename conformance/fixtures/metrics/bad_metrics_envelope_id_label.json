@@ -1,0 +1,13 @@
+{
+  "_comment": "INVALID FIXTURE: eb.envelope_id used as a metric label. Violates cardinality isolation invariant. CI must fail on this.",
+  "series": [
+    {
+      "name": "eb_decisions_total",
+      "labels": {
+        "eb_decision": "DENY",
+        "eb_envelope_id": "550e8400-e29b-41d4-a716-446655440000"
+      },
+      "value": 1
+    }
+  ]
+}
