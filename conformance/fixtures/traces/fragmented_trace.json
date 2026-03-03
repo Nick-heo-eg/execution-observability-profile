@@ -1,0 +1,16 @@
+{
+  "_comment": "INVALID FIXTURE: represents a fragmented trace where eb.evaluate is missing. Used to verify test_trace_integrity catches this condition.",
+  "trace_id": "1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d",
+  "spans": [
+    {
+      "span_id": "aaaaaaaaaaaaaaaa",
+      "name": "http.server.request",
+      "sampled": true,
+      "duration_ms": 5.2,
+      "attributes": {
+        "http.method": "POST",
+        "http.route": "/transfer"
+      }
+    }
+  ]
+}
