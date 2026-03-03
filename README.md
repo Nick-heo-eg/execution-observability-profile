@@ -90,7 +90,7 @@ Full configs: [profiles/k8s/](profiles/k8s/)
 ```bash
 cd examples/otelcol-debug
 docker compose up
-# Grafana → http://localhost:3000  (admin/admin)
+# Grafana → http://localhost:3000  (anonymous access enabled for local debug)
 # Prometheus → http://localhost:9090
 ```
 
