@@ -1,0 +1,36 @@
+{
+  "series": [
+    {
+      "name": "eb_decisions_total",
+      "labels": {
+        "eb_decision": "DENY",
+        "eb_reason_code": "AMOUNT_EXCEEDS_LIMIT",
+        "eb_policy_id": "default"
+      },
+      "value": 42
+    },
+    {
+      "name": "eb_decisions_total",
+      "labels": {
+        "eb_decision": "ALLOW",
+        "eb_reason_code": "POLICY_ALLOW",
+        "eb_policy_id": "default"
+      },
+      "value": 158
+    },
+    {
+      "name": "eb_ledger_commits_total",
+      "labels": {
+        "eb_decision": "DENY"
+      },
+      "value": 42
+    },
+    {
+      "name": "eb_ledger_commits_total",
+      "labels": {
+        "eb_decision": "ALLOW"
+      },
+      "value": 158
+    }
+  ]
+}
