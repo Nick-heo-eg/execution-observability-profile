@@ -57,9 +57,9 @@ processors:
     timeout: 5s
 
 exporters:
-  # Jaeger backend
+  # Jaeger backend — OTLP gRPC (Jaeger 1.35+ with COLLECTOR_OTLP_ENABLED=true)
   otlp/jaeger:
-    endpoint: jaeger:14250
+    endpoint: jaeger:4317
     tls:
       insecure: true
 
